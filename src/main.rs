@@ -12,7 +12,7 @@ use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() -> Result<(), AnyError> {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
     let service = NetworkService::new(
         vec![CapabilityId {

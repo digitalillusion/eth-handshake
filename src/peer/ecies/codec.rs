@@ -1,7 +1,7 @@
 use bytes::{Bytes, BytesMut};
 use ethereum_types::Public;
 
-use log::{debug, error};
+use tracing::{debug, error};
 use secp256k1::SecretKey;
 use tokio_util::codec::*;
 

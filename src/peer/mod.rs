@@ -1,7 +1,9 @@
+use std::collections::HashSet;
+
 use crate::types::Transport;
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use futures::sink::SinkExt;
-use log::{debug, info};
+use tracing::{debug, info, error, instrument};
 use rlp::{Rlp, RlpStream};
 use secp256k1::SecretKey;
 use tokio_stream::StreamExt;
@@ -14,7 +16,7 @@ use crate::types::*;
 pub struct Peer<T> {
     enode: Enode,
     stream: ECIESStream<T>,
-    shared_capabilities: Vec<CapabilityId>,
+    capabilities: Vec<CapabilityId>,
 }
 
 const PROTOCOL_VERSION: usize = 5;
@@ -29,7 +31,7 @@ where
         shared_capabilities: Vec<CapabilityId>,
         secret_key: SecretKey,
     ) -> Result<Self, AnyError> {
-        info!("Connecting to enode {:?}", enode.addr);
+        info!("Connecting to enode {} (remote_id={})", enode.addr, enode.id);
 
         let mut stream = ECIESStream::connect(transport, enode.id, secret_key)
             .await
@@ -45,13 +47,17 @@ where
 
         let hello_received = Self::exchange_hello(&mut stream, hello).await?;
 
+        let capabilities =
+            Self::match_capabilities(shared_capabilities, hello_received)?;
+
         Ok(Self {
             enode,
             stream,
-            shared_capabilities,
+            capabilities,
         })
     }
 
+    #[instrument(skip_all, fields(remote_id=&*format!("{}", hello.id)))]
     async fn exchange_hello(
         stream: &mut ECIESStream<T>,
         hello: HelloMessage,
@@ -101,9 +107,21 @@ where
         }
     }
 
-    async fn match_capabilities(
-        stream: &mut ECIESStream<T>,
-        hello: HelloMessage,
-    ) -> Result<(), HandshakeError> {  Ok(())
+    #[instrument(skip_all, fields(remote_id=&*format!("{}", hello_received.id)))]
+    fn match_capabilities(
+        required: Vec<CapabilityId>,
+        hello_received: HelloMessage,
+    ) -> Result<Vec<CapabilityId>, HandshakeError> {
+        let required: HashSet<CapabilityId> = required.into_iter().collect();
+        let offered: HashSet<CapabilityId> = hello_received.capabilities.into_iter().collect();
+        let intersection: Vec<CapabilityId> = required.intersection(&offered)
+        .map(|el| el.clone()).collect();
+        if intersection.is_empty() {
+            error!("No shared capabilities, disconnecting.");
+            Err(HandshakeError::Disconnect(DisconnectReason::UselessPeer))
+        } else {
+            info!("Found {} shared capabilities", intersection.len());
+            Ok(intersection)
+        }
     }
 }

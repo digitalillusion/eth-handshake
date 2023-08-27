@@ -15,6 +15,7 @@ pub trait Transport: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
 
 impl Transport for TcpStream {}
 
+#[derive(Debug)]
 pub struct Enode {
     pub id: Public,
     pub addr: SocketAddr,

@@ -12,7 +12,7 @@ use std::{
 use bytes::Bytes;
 use ethereum_types::Public;
 use futures::{ready, sink::SinkExt, Sink, Stream};
-use log::{debug, info};
+use tracing::{debug, info, instrument};
 use secp256k1::SecretKey;
 use tokio_stream::StreamExt;
 use tokio_util::codec::*;
@@ -27,13 +27,13 @@ pub use types::ECIESError;
 
 pub struct ECIESStream<T> {
     stream: Framed<T, ECIESCodec>,
-    remote_id: Public,
 }
 
 impl<T> ECIESStream<T>
 where
     T: Transport,
 {
+    #[instrument(skip_all, fields(remote_id=&*format!("{}", remote_id)))]
     pub async fn connect(
         transport: T,
         remote_id: Public,
@@ -60,7 +60,6 @@ where
             info!("Received ECIES ack ...");
             Ok(Self {
                 stream: transport,
-                remote_id,
             })
         } else {
             Err(ECIESError::InvalidHandshake(msg))
