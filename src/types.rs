@@ -1,6 +1,5 @@
 use ethereum_types::Public;
 use std::net::SocketAddr;
-use tokio::net::TcpStream;
 
 pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -32,23 +31,4 @@ impl TryInto<Enode> for &str {
 pub struct CapabilityId {
     pub name: String,
     pub version: usize,
-}
-
-pub struct ECIESStream {
-    transport: TcpStream,
-}
-
-pub struct PeerStream {
-    stream: ECIESStream,
-    shared_capabilities: Vec<CapabilityId>,
-}
-
-impl PeerStream {
-    pub fn new(transport: TcpStream, shared_capabilities: Vec<CapabilityId>) -> Self {
-        let stream = ECIESStream { transport };
-        Self {
-            stream,
-            shared_capabilities,
-        }
-    }
 }

@@ -1,4 +1,5 @@
 mod networkservice;
+mod peer;
 mod types;
 
 use std::time::Duration;
@@ -12,7 +13,7 @@ use tokio::time::sleep;
 #[tokio::main]
 async fn main() -> Result<(), AnyError> {
     env_logger::init();
-    
+
     let service = NetworkService::new(
         vec![CapabilityId {
             name: "eth".to_string(),

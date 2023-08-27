@@ -1,8 +1,6 @@
-use log::info;
 use secp256k1::SecretKey;
-use tokio::net::TcpStream;
 
-use crate::types::{CapabilityId, Enode, PeerStream};
+use crate::{peer::PeerStream, types::*};
 
 pub struct NetworkService {
     capabilities: Vec<CapabilityId>,
@@ -17,10 +15,7 @@ impl NetworkService {
         }
     }
 
-    pub async fn connect(&self, enode: Enode) -> Result<PeerStream, std::io::Error> {
-        info!("Connecting to enode {:?}", enode.addr);
-        let transport = TcpStream::connect(enode.addr).await?;
-
-        Ok(PeerStream::new(transport, self.capabilities.clone()))
+    pub async fn connect(&self, enode: Enode) -> Result<PeerStream, AnyError> {
+        PeerStream::connect(enode, self.capabilities.clone(), self.secret_key).await
     }
 }
