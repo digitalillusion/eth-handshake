@@ -1,6 +1,8 @@
 use secp256k1::SecretKey;
 
-use crate::{peer::PeerStream, types::*};
+use crate::{peer::Peer, types::*};
+
+use tokio::net::TcpStream;
 
 pub struct NetworkService {
     capabilities: Vec<CapabilityId>,
@@ -15,7 +17,8 @@ impl NetworkService {
         }
     }
 
-    pub async fn connect(&self, enode: Enode) -> Result<PeerStream, AnyError> {
-        PeerStream::connect(enode, self.capabilities.clone(), self.secret_key).await
+    pub async fn connect(&self, enode: Enode) -> Result<Peer<TcpStream>, AnyError> {
+        let transport = TcpStream::connect(enode.addr).await?;
+        Peer::handshake(transport, enode, self.capabilities.clone(), self.secret_key).await
     }
 }

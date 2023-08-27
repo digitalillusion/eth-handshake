@@ -47,7 +47,8 @@ impl ECIES {
     pub fn new(secret_key: SecretKey, remote_id: Public) -> Result<Self, ECIESError> {
         let nonce = H256::random();
         let public_key = PublicKey::from_secret_key(SECP256K1, &secret_key);
-        let remote_public_key = id2pk(remote_id).map_err(|err| ECIESError::InvalidRemotePublicKey(err))?;
+        let remote_public_key =
+            id2pk(remote_id).map_err(|err| ECIESError::InvalidRemotePublicKey(err))?;
         let ephemeral_secret_key = SecretKey::new(&mut secp256k1::rand::thread_rng());
         let ephemeral_public_key = PublicKey::from_secret_key(SECP256K1, &ephemeral_secret_key);
         Ok(Self {

@@ -1,8 +1,7 @@
-use std::{num::TryFromIntError, fmt::Display};
+use std::num::TryFromIntError;
 
 use bytes::Bytes;
 use ethereum_types::Public;
-use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Current ECIES state of a connection
@@ -29,7 +28,7 @@ pub enum IngressECIESValue {
     Message(Bytes),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum ECIESError {
     IO(std::io::Error),
     PublicKeyDecryptFailed(secp256k1::Error),
@@ -50,11 +49,5 @@ pub enum ECIESError {
 impl From<std::io::Error> for ECIESError {
     fn from(source: std::io::Error) -> Self {
         ECIESError::IO(source).into()
-    }
-}
-
-impl Display for ECIESError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
     }
 }

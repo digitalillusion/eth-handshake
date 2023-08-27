@@ -70,7 +70,10 @@ impl Decoder for ECIESCodec {
                 }
                 ECIESState::Header => {
                     debug!("Parsing header");
-                    if buf.len() < ECIES::header_len() {
+                    if buf.len() == 0 {
+                        debug!("Parsed header is empty");
+                        return Ok(None);
+                    } else if buf.len() < ECIES::header_len() {
                         error!("Current len {}, need {}", buf.len(), ECIES::header_len());
                         return Ok(None);
                     }

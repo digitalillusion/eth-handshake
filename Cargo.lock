@@ -243,6 +243,7 @@ dependencies = [
  "ethereum-types",
  "futures",
  "generic-array",
+ "hex",
  "hmac",
  "log",
  "rand",
