@@ -1,21 +1,21 @@
 use bytes::{Bytes, BytesMut};
 use ethereum_types::Public;
 
-use tracing::{debug, error};
 use secp256k1::SecretKey;
 use tokio_util::codec::*;
+use tracing::{debug, error};
 
-use super::{algorithm::ECIES, types::*};
+use super::{algorithm::Ecies, types::*};
 
 pub struct ECIESCodec {
-    algorithm: ECIES,
+    algorithm: Ecies,
     state: ECIESState,
 }
 
 impl ECIESCodec {
-    pub fn new(secret_key: SecretKey, remote_id: Public) -> Result<Self, ECIESError> {
+    pub fn new(secret_key: SecretKey, remote_id: Public) -> Result<Self, EciesError> {
         Ok(Self {
-            algorithm: ECIES::new(secret_key, remote_id)?,
+            algorithm: Ecies::new(secret_key, remote_id)?,
             state: ECIESState::Auth,
         })
     }
@@ -23,7 +23,7 @@ impl ECIESCodec {
 
 impl Decoder for ECIESCodec {
     type Item = IngressECIESValue;
-    type Error = ECIESError;
+    type Error = EciesError;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         loop {
@@ -70,16 +70,16 @@ impl Decoder for ECIESCodec {
                 }
                 ECIESState::Header => {
                     debug!("Parsing header");
-                    if buf.len() == 0 {
+                    if buf.is_empty() {
                         debug!("Parsed header is empty");
                         return Ok(None);
-                    } else if buf.len() < ECIES::header_len() {
-                        error!("Current len {}, need {}", buf.len(), ECIES::header_len());
+                    } else if buf.len() < Ecies::header_len() {
+                        error!("Current len {}, need {}", buf.len(), Ecies::header_len());
                         return Ok(None);
                     }
 
                     self.algorithm
-                        .read_header(&mut buf.split_to(ECIES::header_len()))?;
+                        .read_header(&mut buf.split_to(Ecies::header_len()))?;
 
                     self.state = ECIESState::Body;
                 }
@@ -101,7 +101,7 @@ impl Decoder for ECIESCodec {
 }
 
 impl Encoder<EgressECIESValue> for ECIESCodec {
-    type Error = ECIESError;
+    type Error = EciesError;
 
     fn encode(&mut self, item: EgressECIESValue, buf: &mut BytesMut) -> Result<(), Self::Error> {
         match item {
@@ -109,12 +109,6 @@ impl Encoder<EgressECIESValue> for ECIESCodec {
                 debug!("Encoding Auth");
                 self.state = ECIESState::Ack;
                 self.algorithm.write_auth(buf);
-                Ok(())
-            }
-            EgressECIESValue::Ack => {
-                debug!("Encoding Ack");
-                self.state = ECIESState::Header;
-                self.algorithm.write_ack(buf);
                 Ok(())
             }
             EgressECIESValue::Message(data) => {

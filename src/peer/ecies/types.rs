@@ -16,7 +16,6 @@ pub enum ECIESState {
 /// Raw egress values for an ECIES protocol
 pub enum EgressECIESValue {
     Auth,
-    Ack,
     Message(Bytes),
 }
 
@@ -29,7 +28,7 @@ pub enum IngressECIESValue {
 }
 
 #[derive(Debug)]
-pub enum ECIESError {
+pub enum EciesError {
     IO(std::io::Error),
     PublicKeyDecryptFailed(secp256k1::Error),
     TagCheckDecryptFailed,
@@ -44,10 +43,11 @@ pub enum ECIESError {
     InvalidBodySize(TryFromIntError),
     UnreadableStream,
     InvalidHandshake(IngressECIESValue),
+    SubprotocolNotSupported,
 }
 
-impl From<std::io::Error> for ECIESError {
+impl From<std::io::Error> for EciesError {
     fn from(source: std::io::Error) -> Self {
-        ECIESError::IO(source).into()
+        EciesError::IO(source)
     }
 }

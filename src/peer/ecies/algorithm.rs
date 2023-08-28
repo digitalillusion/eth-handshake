@@ -14,13 +14,14 @@ use secp256k1::{
 };
 use sha3::{Digest, Keccak256};
 
+use crate::{peer::functions::*, types::PROTOCOL_VERSION};
+
 use super::{
-    functions::*,
-    mac::{HeaderBytes, MAC},
+    mac::{HeaderBytes, Mac},
     types::*,
 };
 
-pub struct ECIES {
+pub struct Ecies {
     secret_key: SecretKey,
     public_key: PublicKey,
     nonce: H256,
@@ -30,27 +31,24 @@ pub struct ECIES {
     remote_nonce: Option<H256>,
     remote_ephemeral_public_key: Option<PublicKey>,
     ephemeral_secret_key: SecretKey,
-    ephemeral_public_key: PublicKey,
     ephemeral_shared_secret: Option<H256>,
     ingress_aes: Option<Ctr64BE<Aes256>>,
     egress_aes: Option<Ctr64BE<Aes256>>,
-    ingress_mac: Option<MAC>,
-    egress_mac: Option<MAC>,
+    ingress_mac: Option<Mac>,
+    egress_mac: Option<Mac>,
     body_size: Option<usize>,
     init_msg: Option<Bytes>,
 }
 
 const ECIES_HEADER_LEN: usize = 32;
-const PROTOCOL_VERSION: usize = 4;
 
-impl ECIES {
-    pub fn new(secret_key: SecretKey, remote_id: Public) -> Result<Self, ECIESError> {
+impl Ecies {
+    pub fn new(secret_key: SecretKey, remote_id: Public) -> Result<Self, EciesError> {
         let nonce = H256::random();
         let public_key = PublicKey::from_secret_key(SECP256K1, &secret_key);
         let remote_public_key =
-            id2pk(remote_id).map_err(|err| ECIESError::InvalidRemotePublicKey(err))?;
+            id2pk(remote_id).map_err(EciesError::InvalidRemotePublicKey)?;
         let ephemeral_secret_key = SecretKey::new(&mut secp256k1::rand::thread_rng());
-        let ephemeral_public_key = PublicKey::from_secret_key(SECP256K1, &ephemeral_secret_key);
         Ok(Self {
             secret_key,
             public_key,
@@ -61,7 +59,6 @@ impl ECIES {
             remote_nonce: None,
             remote_ephemeral_public_key: None,
             ephemeral_secret_key,
-            ephemeral_public_key,
             ephemeral_shared_secret: None,
             ingress_aes: None,
             egress_aes: None,
@@ -73,7 +70,7 @@ impl ECIES {
     }
 
     pub fn remote_id(&self) -> Public {
-        self.remote_id.unwrap_or_default().clone()
+        self.remote_id.unwrap_or_default()
     }
 
     pub const fn header_len() -> usize {
@@ -89,7 +86,7 @@ impl ECIES {
         }) + 16
     }
 
-    pub fn read_auth(&mut self, data: &mut [u8]) -> Result<(), ECIESError> {
+    pub fn read_auth(&mut self, data: &mut [u8]) -> Result<(), EciesError> {
         self.remote_init_msg = Some(Bytes::copy_from_slice(data));
         let unencrypted = self.decrypt_message(data)?;
         self.parse_auth_unencrypted(unencrypted)
@@ -115,7 +112,7 @@ impl ECIES {
         buf.unsplit(out);
     }
 
-    pub fn read_ack(&mut self, data: &mut [u8]) -> Result<(), ECIESError> {
+    pub fn read_ack(&mut self, data: &mut [u8]) -> Result<(), EciesError> {
         self.remote_init_msg = Some(Bytes::copy_from_slice(data));
         let unencrypted = self.decrypt_message(data)?;
         self.parse_ack_unencrypted(unencrypted)?;
@@ -123,27 +120,7 @@ impl ECIES {
         Ok(())
     }
 
-    pub fn write_ack(&mut self, out: &mut BytesMut) {
-        let unencrypted = self.create_ack_unencrypted();
-
-        let mut buf = out.split_off(out.len());
-
-        buf.put_u16(0);
-
-        let mut encrypted = buf.split_off(buf.len());
-        self.encrypt_message(unencrypted.as_ref(), &mut encrypted);
-        let len_bytes = u16::try_from(encrypted.len()).unwrap().to_be_bytes();
-        buf.unsplit(encrypted);
-
-        buf[..len_bytes.len()].copy_from_slice(&len_bytes[..]);
-
-        self.init_msg = Some(buf.clone().freeze());
-        out.unsplit(buf);
-
-        self.setup_frame(true);
-    }
-
-    pub fn read_header(&mut self, data: &mut [u8]) -> Result<usize, ECIESError> {
+    pub fn read_header(&mut self, data: &mut [u8]) -> Result<usize, EciesError> {
         let (header_bytes, mac_bytes) = data.split_at_mut(16);
         let header = HeaderBytes::from_mut_slice(header_bytes);
         let mac = H128::from_slice(&mac_bytes[..16]);
@@ -151,16 +128,16 @@ impl ECIES {
         self.ingress_mac.as_mut().unwrap().update_header(header);
         let check_mac = self.ingress_mac.as_mut().unwrap().digest();
         if check_mac != mac {
-            return Err(ECIESError::TagCheckHeaderFailed);
+            return Err(EciesError::TagCheckHeaderFailed);
         }
 
         self.ingress_aes.as_mut().unwrap().apply_keystream(header);
         if header.as_slice().len() < 3 {
-            return Err(ECIESError::InvalidHeader);
+            return Err(EciesError::InvalidHeader);
         }
 
         let body_size = usize::try_from(header.as_slice().read_uint::<BigEndian>(3)?)
-            .map_err(|err| ECIESError::InvalidBodySize(err))?;
+            .map_err(EciesError::InvalidBodySize)?;
 
         self.body_size = Some(body_size);
 
@@ -182,18 +159,18 @@ impl ECIES {
         self.egress_mac.as_mut().unwrap().update_header(&header);
         let tag = self.egress_mac.as_mut().unwrap().digest();
 
-        out.reserve(ECIES::header_len());
+        out.reserve(Ecies::header_len());
         out.extend_from_slice(header.as_ref());
         out.extend_from_slice(tag.as_bytes());
     }
 
-    pub fn read_body<'a>(&mut self, data: &'a mut [u8]) -> Result<&'a mut [u8], ECIESError> {
+    pub fn read_body<'a>(&mut self, data: &'a mut [u8]) -> Result<&'a mut [u8], EciesError> {
         let (body, mac_bytes) = data.split_at_mut(data.len() - 16);
         let mac = H128::from_slice(mac_bytes);
         self.ingress_mac.as_mut().unwrap().update_body(body);
         let check_mac = self.ingress_mac.as_mut().unwrap().digest();
         if check_mac != mac {
-            return Err(ECIESError::TagCheckBodyFailed);
+            return Err(EciesError::TagCheckBodyFailed);
         }
 
         let size = self.body_size.unwrap();
@@ -222,11 +199,11 @@ impl ECIES {
         out.extend_from_slice(tag.as_bytes());
     }
 
-    fn decrypt_message<'a>(&self, data: &'a mut [u8]) -> Result<&'a mut [u8], ECIESError> {
+    fn decrypt_message<'a>(&self, data: &'a mut [u8]) -> Result<&'a mut [u8], EciesError> {
         let (auth_data, encrypted) = data.split_at_mut(2);
         let (pubkey_bytes, encrypted) = encrypted.split_at_mut(65);
         let public_key = PublicKey::from_slice(pubkey_bytes)
-            .map_err(|err| ECIESError::PublicKeyDecryptFailed(err))?;
+            .map_err(EciesError::PublicKeyDecryptFailed)?;
         let (data_iv, tag_bytes) = encrypted.split_at_mut(encrypted.len() - 32);
         let (iv, encrypted_data) = data_iv.split_at_mut(16);
         let tag = H256::from_slice(tag_bytes);
@@ -239,7 +216,7 @@ impl ECIES {
 
         let check_tag = hmac_sha256(mac_key.as_ref(), &[iv, encrypted_data], auth_data);
         if check_tag != tag {
-            return Err(ECIESError::TagCheckDecryptFailed);
+            return Err(EciesError::TagCheckDecryptFailed);
         }
 
         let decrypted_data = encrypted_data;
@@ -250,44 +227,44 @@ impl ECIES {
         Ok(decrypted_data)
     }
 
-    fn parse_auth_unencrypted(&mut self, data: &[u8]) -> Result<(), ECIESError> {
+    fn parse_auth_unencrypted(&mut self, data: &[u8]) -> Result<(), EciesError> {
         let rlp = Rlp::new(data);
         let mut rlp = rlp.into_iter();
 
         let sigdata = rlp
             .next()
-            .ok_or(ECIESError::InvalidSignatureData(
+            .ok_or(EciesError::InvalidSignatureData(
                 rlp::DecoderError::RlpInvalidLength,
             ))?
             .data()
-            .map_err(|err| ECIESError::InvalidSignatureData(err))?;
+            .map_err(EciesError::InvalidSignatureData)?;
         if sigdata.len() != 65 {
-            return Err(ECIESError::InvalidAuthData);
+            return Err(EciesError::InvalidAuthData);
         }
         let signature = RecoverableSignature::from_compact(
             &sigdata[0..64],
             RecoveryId::from_i32(sigdata[64] as i32)
-                .map_err(|err| ECIESError::InvalidRecoveryData(err))?,
+                .map_err(EciesError::InvalidRecoveryData)?,
         )
-        .map_err(|err| ECIESError::InvalidRecoveryData(err))?;
+        .map_err(EciesError::InvalidRecoveryData)?;
         let remote_id = rlp
             .next()
-            .ok_or(ECIESError::InvalidRemoteData(
+            .ok_or(EciesError::InvalidRemoteData(
                 rlp::DecoderError::RlpInvalidLength,
             ))?
             .as_val::<Public>()
-            .map_err(|err| ECIESError::InvalidRemoteData(err))?;
+            .map_err(EciesError::InvalidRemoteData)?;
         self.remote_id = Some(remote_id);
         self.remote_public_key = id2pk(remote_id)
-            .map_err(|err| ECIESError::InvalidRemotePublicKey(err))
+            .map_err(EciesError::InvalidRemotePublicKey)
             .ok();
         self.remote_nonce = Some(
             rlp.next()
-                .ok_or(ECIESError::InvalidRemoteData(
+                .ok_or(EciesError::InvalidRemoteData(
                     rlp::DecoderError::RlpInvalidLength,
                 ))?
                 .as_val::<H256>()
-                .map_err(|err| ECIESError::InvalidRemoteData(err))?,
+                .map_err(EciesError::InvalidRemoteData)?,
         );
 
         let x = ecdh_x(&self.remote_public_key.unwrap(), &self.secret_key);
@@ -298,7 +275,7 @@ impl ECIES {
                         .unwrap(),
                     &signature,
                 )
-                .map_err(|err| ECIESError::InvalidRemotePublicKey(err))?,
+                .map_err(EciesError::InvalidRemotePublicKey)?,
         );
         self.ephemeral_shared_secret = Some(ecdh_x(
             &self.remote_ephemeral_public_key.unwrap(),
@@ -315,25 +292,25 @@ impl ECIES {
     ///
     /// This sets the `remote_ephemeral_public_key` and `remote_nonce`, and
     /// `ephemeral_shared_secret` fields in the ECIES state.
-    fn parse_ack_unencrypted(&mut self, data: &[u8]) -> Result<(), ECIESError> {
+    fn parse_ack_unencrypted(&mut self, data: &[u8]) -> Result<(), EciesError> {
         let rlp = Rlp::new(data);
         let mut rlp = rlp.into_iter();
         self.remote_ephemeral_public_key = id2pk(
             rlp.next()
-                .ok_or(ECIESError::InvalidRemoteData(
+                .ok_or(EciesError::InvalidRemoteData(
                     rlp::DecoderError::RlpInvalidLength,
                 ))?
                 .as_val::<H512>()
-                .map_err(|err| ECIESError::InvalidRemoteData(err))?,
+                .map_err(EciesError::InvalidRemoteData)?,
         )
         .ok();
         self.remote_nonce = Some(
             rlp.next()
-                .ok_or(ECIESError::InvalidRemoteData(
+                .ok_or(EciesError::InvalidRemoteData(
                     rlp::DecoderError::RlpInvalidLength,
                 ))?
                 .as_val::<H256>()
-                .map_err(|err| ECIESError::InvalidRemoteData(err))?,
+                .map_err(EciesError::InvalidRemoteData)?,
         );
 
         self.ephemeral_shared_secret = Some(ecdh_x(
@@ -383,7 +360,7 @@ impl ECIES {
             hasher.update(aes_secret.0.as_ref());
             H256::from(hasher.finalize().as_ref())
         };
-        self.ingress_mac = Some(MAC::new(mac_secret));
+        self.ingress_mac = Some(Mac::new(mac_secret));
         self.ingress_mac
             .as_mut()
             .unwrap()
@@ -392,7 +369,7 @@ impl ECIES {
             .as_mut()
             .unwrap()
             .update(self.remote_init_msg.as_ref().unwrap());
-        self.egress_mac = Some(MAC::new(mac_secret));
+        self.egress_mac = Some(Mac::new(mac_secret));
         self.egress_mac
             .as_mut()
             .unwrap()
@@ -459,13 +436,5 @@ impl ECIES {
         out.extend_from_slice(iv.as_bytes());
         out.extend_from_slice(&encrypted);
         out.extend_from_slice(tag.as_ref());
-    }
-
-    fn create_ack_unencrypted(&self) -> BytesMut {
-        let mut out = RlpStream::new_list(3);
-        out.append(&pk2id(&self.ephemeral_public_key));
-        out.append(&self.nonce);
-        out.append(&PROTOCOL_VERSION);
-        out.out()
     }
 }

@@ -44,7 +44,7 @@ pub fn kdf(secret: H256, s1: &[u8], dest: &mut [u8]) {
             (ctr >> 8) as u8,
             ctr as u8,
         ];
-        hasher.update(&ctrs);
+        hasher.update(ctrs);
         hasher.update(secret.as_bytes());
         hasher.update(s1);
         let d = hasher.finalize();

@@ -7,7 +7,10 @@ use tokio::{
     net::TcpStream,
 };
 
-use crate::peer::ecies::ECIESError;
+use crate::peer::ecies::EciesError;
+
+/// Protocol version 4 doesn't deal with compression
+pub const PROTOCOL_VERSION: usize = 4;
 
 pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -21,7 +24,7 @@ pub struct Enode {
     pub addr: SocketAddr,
 }
 
-impl TryInto<Enode> for &str {
+impl TryInto<Enode> for String {
     type Error = AnyError;
 
     fn try_into(self) -> Result<Enode, Self::Error> {
@@ -41,12 +44,12 @@ impl TryInto<Enode> for &str {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct CapabilityId {
+pub struct CapabilityInfo {
     pub name: String,
     pub version: usize,
 }
 
-impl Encodable for CapabilityId {
+impl Encodable for CapabilityInfo {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_list(2);
         s.append(&self.name);
@@ -54,7 +57,7 @@ impl Encodable for CapabilityId {
     }
 }
 
-impl Decodable for CapabilityId {
+impl Decodable for CapabilityInfo {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
         Ok(Self {
             name: rlp.val_at(0)?,
@@ -67,7 +70,7 @@ impl Decodable for CapabilityId {
 pub struct HelloMessage {
     pub protocol_version: usize,
     pub client_version: String,
-    pub capabilities: Vec<CapabilityId>,
+    pub capabilities: Vec<CapabilityInfo>,
     pub port: u16,
     pub id: Public,
 }
@@ -95,6 +98,7 @@ impl Decodable for HelloMessage {
     }
 }
 
+#[repr(u8)]
 /// RLPx disconnect reason.
 #[derive(Clone, Copy, Debug)]
 pub enum DisconnectReason {
@@ -126,6 +130,13 @@ pub enum DisconnectReason {
     SubprotocolSpecific = 0x10,
 }
 
+impl Encodable for DisconnectReason {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        let reason: u8 = *self as u8;
+        s.append(&reason);
+    }
+}
+
 impl TryFrom<u8> for DisconnectReason {
     type Error = DecoderError;
     fn try_from(value: u8) -> Result<Self, DecoderError> {
@@ -148,18 +159,39 @@ impl TryFrom<u8> for DisconnectReason {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum PeerMessage {
+    Disconnect(DisconnectReason),
+    Ping,
+    Pong,
+    Subprotocol,
+}
+
 #[derive(Debug, Error)]
 pub enum HandshakeError {
-    ConnectionError(ECIESError),
-    HelloSendError(ECIESError),
+    ConnectionError(EciesError),
+    HelloSendError(EciesError),
     HelloReceiveError(std::io::Error),
     HelloReceiveParse,
     HelloReceiveDecode(DecoderError),
-    Disconnect(DisconnectReason),
+    HelloReceiveDisconnect(DisconnectReason),
+    NoSharedCapabilities,
 }
 
 impl Display for HandshakeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum DisconnectInitiator {
+    Local,
+    LocalForceful,
+    Remote,
+}
+
+pub struct DisconnectSignal {
+    pub initiator: DisconnectInitiator,
+    pub reason: DisconnectReason,
 }

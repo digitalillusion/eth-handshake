@@ -19,12 +19,12 @@ pub type HeaderBytes = GenericArray<u8, U16>;
 /// block cipher) and Keccak-256. However, it only ever encrypts messages that are 128 bits long,
 /// and is not defined as a general MAC.
 #[derive(Debug)]
-pub struct MAC {
+pub struct Mac {
     secret: H256,
     hasher: Keccak256,
 }
 
-impl MAC {
+impl Mac {
     /// Initialize the MAC with the given secret
     pub fn new(secret: H256) -> Self {
         Self {

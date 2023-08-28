@@ -1,6 +1,5 @@
 mod algorithm;
 mod codec;
-mod functions;
 mod mac;
 mod types;
 
@@ -12,10 +11,10 @@ use std::{
 use bytes::Bytes;
 use ethereum_types::Public;
 use futures::{ready, sink::SinkExt, Sink, Stream};
-use tracing::{debug, info, instrument};
 use secp256k1::SecretKey;
 use tokio_stream::StreamExt;
 use tokio_util::codec::*;
+use tracing::{debug, info, instrument};
 
 use crate::types::Transport;
 
@@ -23,7 +22,7 @@ use self::codec::ECIESCodec;
 
 use types::{EgressECIESValue, IngressECIESValue};
 
-pub use types::ECIESError;
+pub use types::EciesError;
 
 pub struct ECIESStream<T> {
     stream: Framed<T, ECIESCodec>,
@@ -38,7 +37,7 @@ where
         transport: T,
         remote_id: Public,
         secret_key: SecretKey,
-    ) -> Result<Self, ECIESError> {
+    ) -> Result<Self, EciesError> {
         let codec = ECIESCodec::new(secret_key, remote_id)?;
 
         let mut transport = codec.framed(transport);
@@ -53,16 +52,14 @@ where
         // `Framed` returns `None` if the underlying stream is no longer readable, and the codec is
         // unable to decode another message from the (partially filled) buffer. This usually happens
         // if the remote drops the TcpStream.
-        let msg: IngressECIESValue = msg.ok_or(ECIESError::UnreadableStream)?;
+        let msg: IngressECIESValue = msg.ok_or(EciesError::UnreadableStream)?;
 
         debug!("Parsing ECIES ack ...");
         if matches!(msg, IngressECIESValue::Ack) {
             info!("Received ECIES ack ...");
-            Ok(Self {
-                stream: transport,
-            })
+            Ok(Self { stream: transport })
         } else {
-            Err(ECIESError::InvalidHandshake(msg))
+            Err(EciesError::InvalidHandshake(msg))
         }
     }
 }
@@ -92,7 +89,7 @@ impl<Io> Sink<Bytes> for ECIESStream<Io>
 where
     Io: Transport,
 {
-    type Error = ECIESError;
+    type Error = EciesError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Pin::new(&mut self.get_mut().stream).poll_ready(cx)

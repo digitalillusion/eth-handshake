@@ -2,30 +2,44 @@ mod networkservice;
 mod peer;
 mod types;
 
-use std::time::Duration;
-
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use networkservice::NetworkService;
 use secp256k1::SecretKey;
 use types::*;
+use clap::Parser;
 
-use tokio::time::sleep;
+#[derive(Parser)]
+struct Cli {
+    #[arg(required=true)]
+    /// The list of enodes to connect ("enode://...")
+    enodes: Vec<String>,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), AnyError> {
+    let args = Cli::parse();
     tracing_subscriber::fmt::init();
 
     let service = NetworkService::new(
-        vec![CapabilityId {
+        vec![CapabilityInfo {
             name: "eth".to_string(),
             version: 68,
         }],
         SecretKey::new(&mut secp256k1::rand::thread_rng()),
     );
 
-    let node : Enode = "enode://cc18ebf1077535196433f07bf6d5d6026a4d115b6b61ba7428ff46341cb3dd37275d15d26685aae2beb10b6e5b14e6d3d18d986baaba835145651f59efb6f9b9@127.0.0.1:30303".try_into()?;
+    let mut tasks = FuturesUnordered::new();
 
-    let _stream = service.connect(node).await?;
+    for node in args.enodes {
+        let node : Enode = node.try_into()?;
+        tasks.push(service.connect_and_then(node, |peer| {
+            futures::executor::block_on(peer.ping());
+            peer.disconnect();
+        }));
+    }
 
-    sleep(Duration::from_secs(5)).await;
+    while tasks.next().await.is_some() {}
+
     Ok(())
 }
