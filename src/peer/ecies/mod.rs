@@ -2,15 +2,10 @@ mod algorithm;
 mod codec;
 mod mac;
 mod types;
+mod traits;
 
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-};
-
-use bytes::Bytes;
 use ethereum_types::Public;
-use futures::{ready, sink::SinkExt, Sink, Stream};
+use futures::sink::SinkExt;
 use secp256k1::SecretKey;
 use tokio_stream::StreamExt;
 use tokio_util::codec::*;
@@ -18,27 +13,41 @@ use tracing::{debug, info, instrument};
 
 use crate::types::Transport;
 
-use self::codec::ECIESCodec;
+use self::codec::EciesCodec;
 
 use types::{EgressECIESValue, IngressECIESValue};
 
 pub use types::EciesError;
 
-pub struct ECIESStream<T> {
-    stream: Framed<T, ECIESCodec>,
+/// Structure representing an ECIES stream.
+/// The transport is framed with a [`EciesCodec`] that provides interpretation of the raw bytes
+/// 
+/// ### Type arguments
+///  - T: The type of the transport to use for the `EciesStream`, must implement the [`Transport`] trait
+pub struct EciesStream<T> {
+    stream: Framed<T, EciesCodec>,
 }
 
-impl<T> ECIESStream<T>
+impl<T> EciesStream<T>
 where
     T: Transport,
 {
+    /// Perform a connection the other peer
+    /// 
+    /// ### Arguments
+    ///  - transport: The transport to use for the [`EciesStream`]
+    ///  - remote_id: The [`Public`] key of the other peer
+    ///  - secret_key: The secret key of this client
+    /// 
+    /// ### Return
+    /// Result of `EciesStream<T>` or [`eth-handshake::types::AnyError`]
     #[instrument(skip_all, fields(remote_id=&*format!("{}", remote_id)))]
     pub async fn connect(
         transport: T,
         remote_id: Public,
         secret_key: SecretKey,
     ) -> Result<Self, EciesError> {
-        let codec = ECIESCodec::new(secret_key, remote_id)?;
+        let codec = EciesCodec::new(secret_key, remote_id)?;
 
         let mut transport = codec.framed(transport);
 
@@ -61,52 +70,5 @@ where
         } else {
             Err(EciesError::InvalidHandshake(msg))
         }
-    }
-}
-
-impl<T> Stream for ECIESStream<T>
-where
-    T: Transport,
-{
-    type Item = Result<Bytes, std::io::Error>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match ready!(Pin::new(&mut self.get_mut().stream).poll_next(cx)) {
-            Some(Ok(IngressECIESValue::Message(body))) => Poll::Ready(Some(Ok(body))),
-            Some(other) => Poll::Ready(Some(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "ECIES stream protocol error: expected message, received {:?}",
-                    other
-                ),
-            )))),
-            None => Poll::Ready(None),
-        }
-    }
-}
-
-impl<Io> Sink<Bytes> for ECIESStream<Io>
-where
-    Io: Transport,
-{
-    type Error = EciesError;
-
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.get_mut().stream).poll_ready(cx)
-    }
-
-    fn start_send(self: Pin<&mut Self>, item: Bytes) -> Result<(), Self::Error> {
-        let this = self.get_mut();
-        Pin::new(&mut this.stream).start_send(EgressECIESValue::Message(item))?;
-
-        Ok(())
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.get_mut().stream).poll_flush(cx)
-    }
-
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.get_mut().stream).poll_close(cx)
     }
 }

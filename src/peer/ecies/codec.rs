@@ -7,12 +7,12 @@ use tracing::{debug, error};
 
 use super::{algorithm::Ecies, types::*};
 
-pub struct ECIESCodec {
+pub struct EciesCodec {
     algorithm: Ecies,
     state: ECIESState,
 }
 
-impl ECIESCodec {
+impl EciesCodec {
     pub fn new(secret_key: SecretKey, remote_id: Public) -> Result<Self, EciesError> {
         Ok(Self {
             algorithm: Ecies::new(secret_key, remote_id)?,
@@ -21,7 +21,7 @@ impl ECIESCodec {
     }
 }
 
-impl Decoder for ECIESCodec {
+impl Decoder for EciesCodec {
     type Item = IngressECIESValue;
     type Error = EciesError;
 
@@ -100,7 +100,7 @@ impl Decoder for ECIESCodec {
     }
 }
 
-impl Encoder<EgressECIESValue> for ECIESCodec {
+impl Encoder<EgressECIESValue> for EciesCodec {
     type Error = EciesError;
 
     fn encode(&mut self, item: EgressECIESValue, buf: &mut BytesMut) -> Result<(), Self::Error> {

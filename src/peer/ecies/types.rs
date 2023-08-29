@@ -28,6 +28,7 @@ pub enum IngressECIESValue {
 }
 
 #[derive(Debug)]
+/// ECIES protocol errors
 pub enum EciesError {
     IO(std::io::Error),
     PublicKeyDecryptFailed(secp256k1::Error),
@@ -46,6 +47,7 @@ pub enum EciesError {
     SubprotocolNotSupported,
 }
 
+/// Implementation of the [`From`] trait to transform a [`EciesError`] into a [`std::io::Error`]
 impl From<std::io::Error> for EciesError {
     fn from(source: std::io::Error) -> Self {
         EciesError::IO(source)

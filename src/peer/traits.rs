@@ -11,6 +11,12 @@ use crate::types::{DisconnectReason, PeerMessage, Transport};
 
 use super::{ecies::EciesError, Peer};
 
+/// Implement the [`Stream`] trait for [`Peer<T>`].
+/// 
+/// This trait is used to poll the peer's [`Stream`] for [`PeerMessage`]s that were received from the remote peer
+/// 
+/// ### See also
+/// [`futures::StreamExt::split`] in order to be able to obtain a [`Sink`] and [`Stream`] interface 
 impl<T> Stream for Peer<T>
 where
     T: Transport,
@@ -20,6 +26,7 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let s = self.get_mut();
 
+        // Avoid enqueuing messages for a disconnecting peer
         if s.disconnecting {
             return Poll::Ready(None)
         }
@@ -27,6 +34,7 @@ where
         match ready!(Pin::new(&mut s.stream).poll_next(cx)) {
             Some(Ok(val)) => {
                 debug!("Received peer message: {}", hex::encode(&val));
+                // RLPx decoding of the received message
                 let message_id_rlp = Rlp::new(&val[0..1]);
                 let message_id: Result<usize, rlp::DecoderError> = message_id_rlp.as_val();
                 let data = Bytes::copy_from_slice(&val[1..]);
@@ -72,6 +80,12 @@ where
     }
 }
 
+/// Implement the [`Sink`] trait for [`Peer<T>`].
+/// 
+/// This trait is used to send [`PeerMessage`]s to the peer's [`Sink`], which in turn send them to the remote peer
+/// 
+/// ### See also
+/// [`futures::StreamExt::split`] in order to be able to obtain a [`Sink`] and [`Stream`] interface
 impl<Io> Sink<PeerMessage> for Peer<Io>
 where
     Io: Transport,
@@ -100,6 +114,7 @@ where
             }
         };
 
+        // RLPX encoding of the message to send 
         let mut s = RlpStream::new_with_buffer(BytesMut::with_capacity(2 + payload.len()));
         s.append(&message_id);
         let mut msg = s.out();

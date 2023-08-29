@@ -7,9 +7,16 @@ use std::{
 
 use crate::types::Transport;
 
-use super::{types::*, ECIESStream};
+use super::{types::*, EciesStream};
 
-impl<T> Stream for ECIESStream<T>
+/// Implement the [`Stream`] trait for [`EciesStream<T>`].
+/// 
+/// This trait is used to poll the [`Stream`] for [`Bytes`]s that were received from the remote peer.
+/// A `EciesCodec` is used to interpret those bytes that form a frame
+/// 
+/// ### See also
+/// [`tokio_util::codec`] in order to appy a frame on [`Sink`] and [`Stream`] interface 
+impl<T> Stream for EciesStream<T>
 where
     T: Transport,
 {
@@ -30,11 +37,18 @@ where
     }
 }
 
-impl<Io> Sink<Bytes> for ECIESStream<Io>
+/// Implement the [`Sink`] trait for [`EciesStream<T>`].
+/// 
+/// This trait is used to send [`Bytes`]s to the [`Sink`]
+/// A `EciesCodec` is used to interpret those bytes that form a frame
+/// 
+/// ### See also
+/// [`tokio_util::codec`] in order to appy a frame on [`Sink`] and [`Stream`] interface 
+impl<Io> Sink<Bytes> for EciesStream<Io>
 where
     Io: Transport,
 {
-    type Error = ECIESError;
+    type Error = EciesError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Pin::new(&mut self.get_mut().stream).poll_ready(cx)

@@ -9,6 +9,7 @@ use secp256k1::SecretKey;
 use types::*;
 use clap::Parser;
 
+/// Clap representation of the main arguments
 #[derive(Parser)]
 struct Cli {
     #[arg(required=true)]
@@ -16,11 +17,18 @@ struct Cli {
     enodes: Vec<String>,
 }
 
+/// ### eth-handshake
+///
+/// This program implements the handshake toward an ethereum node using RLPx protocol
+/// and verifies that the it was successful by exchanging Ping-Pong messages
 #[tokio::main]
 async fn main() -> Result<(), AnyError> {
+    // Parse the command line arguments
     let args = Cli::parse();
+    // Initialize the logger
     tracing_subscriber::fmt::init();
 
+    // Instance the client
     let service = NetworkService::new(
         vec![CapabilityInfo {
             name: "eth".to_string(),
@@ -29,16 +37,19 @@ async fn main() -> Result<(), AnyError> {
         SecretKey::new(&mut secp256k1::rand::thread_rng()),
     );
 
+    // Collector of all spawned tasks
     let mut tasks = FuturesUnordered::new();
 
+    // Spawn a connection and then ping toward all the enodes passed as argument
     for node in args.enodes {
         let node : Enode = node.try_into()?;
         tasks.push(service.connect_and_then(node, |peer| {
-            futures::executor::block_on(peer.ping());
+            peer.ping();
             peer.disconnect();
         }));
     }
 
+    // Await termination of all spawned tasks
     while tasks.next().await.is_some() {}
 
     Ok(())

@@ -12,18 +12,25 @@ use crate::peer::ecies::EciesError;
 /// Protocol version 4 doesn't deal with compression
 pub const PROTOCOL_VERSION: usize = 4;
 
+/// Wrapper for any [`std::error::Error`]
 pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
+/// Transport trait implemented by [`tokio::net::TcpStream`]
 pub trait Transport: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
 
+/// Implementation of the [`Transport`]  [`tokio::net::TcpStream`]
 impl Transport for TcpStream {}
 
+/// Network representation of an ethereum node
 #[derive(Debug)]
 pub struct Enode {
+    /// The node id
     pub id: Public,
+    /// The [`SocketAddr`] of the connection
     pub addr: SocketAddr,
 }
 
+/// Implementation of the [`TryInto`] trait to transform a [`String`] into an [`Enode`]
 impl TryInto<Enode> for String {
     type Error = AnyError;
 
@@ -43,12 +50,16 @@ impl TryInto<Enode> for String {
     }
 }
 
+/// RPLx data model for Capabilites messaging
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CapabilityInfo {
+    /// The capability name
     pub name: String,
+    /// The capability version
     pub version: usize,
 }
 
+/// RPLx encodable trait implementation for Capabilites messaging
 impl Encodable for CapabilityInfo {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_list(2);
@@ -57,6 +68,7 @@ impl Encodable for CapabilityInfo {
     }
 }
 
+/// RPLx decodable trait implementation for Capabilites messaging
 impl Decodable for CapabilityInfo {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
         Ok(Self {
@@ -66,15 +78,22 @@ impl Decodable for CapabilityInfo {
     }
 }
 
+/// RPLx hello message
 #[derive(Clone, Debug)]
 pub struct HelloMessage {
+    /// The protocol version
     pub protocol_version: usize,
+    /// The version of the client sending the message
     pub client_version: String,
+    /// List of Capabilities supported by the client sending the message
     pub capabilities: Vec<CapabilityInfo>,
+    /// Port to connect to. 0 means a random available port will be attributed
     pub port: u16,
+    /// Peer Id of the peer toward who the message is sent
     pub id: Public,
 }
 
+/// RPLx encodable trait for hello message
 impl Encodable for HelloMessage {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_list(5);
@@ -86,6 +105,7 @@ impl Encodable for HelloMessage {
     }
 }
 
+/// RPLx decodable trait for hello message
 impl Decodable for HelloMessage {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
         Ok(Self {
@@ -99,7 +119,7 @@ impl Decodable for HelloMessage {
 }
 
 #[repr(u8)]
-/// RLPx disconnect reason.
+/// RPLx disconnect reason. It's using a byte (u8) representation to match the protocol
 #[derive(Clone, Copy, Debug)]
 pub enum DisconnectReason {
     /// Disconnect requested by the local node or remote peer.
@@ -130,6 +150,7 @@ pub enum DisconnectReason {
     SubprotocolSpecific = 0x10,
 }
 
+/// RPLx encodable trait for disconnect reason
 impl Encodable for DisconnectReason {
     fn rlp_append(&self, s: &mut RlpStream) {
         let reason: u8 = *self as u8;
@@ -137,6 +158,7 @@ impl Encodable for DisconnectReason {
     }
 }
 
+/// Implementation of the [`TryInto`] trait to transform a [`u8`] into an [`DisconnectReason`] handling the possible decode error
 impl TryFrom<u8> for DisconnectReason {
     type Error = DecoderError;
     fn try_from(value: u8) -> Result<Self, DecoderError> {
@@ -159,39 +181,59 @@ impl TryFrom<u8> for DisconnectReason {
     }
 }
 
+/// Representation of the messages this client exchanges with other peers
 #[derive(Clone, Debug)]
 pub enum PeerMessage {
+    /// Disconnect message, providing a reason for the disconnection
     Disconnect(DisconnectReason),
+    /// Ping message
     Ping,
+    /// Pong message
     Pong,
+    /// All other messages the client may receive from other peers. They must be consumed from the stream
+    /// thus they need to be represented here
     Subprotocol,
 }
 
+/// Application errors
 #[derive(Debug, Error)]
 pub enum HandshakeError {
+    /// The initial connection failed because of an ECIES error
     ConnectionError(EciesError),
+    /// Sending an hello message failed because of an ECIES error
     HelloSendError(EciesError),
+    /// Receiving an hello message failed because of an io error
     HelloReceiveError(std::io::Error),
+    /// Parsing the received hello message failed
     HelloReceiveParse,
+    /// Decoding the received hello message failed
     HelloReceiveDecode(DecoderError),
+    /// The hello message requested a disconnection
     HelloReceiveDisconnect(DisconnectReason),
+    /// This client does not have any capabilities in common with the peer it's trying to connect to
     NoSharedCapabilities,
 }
 
+/// Implementation of the [`Display`] trait for [`HandshakeError`]
 impl Display for HandshakeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
+/// Indication of the initiator of a disconnection
 #[derive(Debug, Clone, Copy)]
 pub enum DisconnectInitiator {
+    /// The disconnection was initiated locally
     Local,
-    LocalForceful,
+    /// The disconnection was initiated remotely
     Remote,
 }
 
+/// Signal of disconnection
 pub struct DisconnectSignal {
+    /// Indication of the initiator
     pub initiator: DisconnectInitiator,
+    /// Reason of the disconnection
     pub reason: DisconnectReason,
 }

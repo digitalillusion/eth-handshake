@@ -31,6 +31,12 @@ Run a release cargo build:
 
     cargo build --release
 
+## Producing documentation
+
+The code contains rustdoc comments. In order to produce the HTML documentation and view it in browser it's sufficient to run:
+
+    cargo doc --open
+
 ## Running the tests
 
 Explain how to run the automated tests for this system

@@ -3,32 +3,39 @@ use std::time::Duration;
 use futures::SinkExt;
 use secp256k1::SecretKey;
 use tokio_stream::StreamExt;
-use tracing::{debug, info};
+use tracing::{debug, info, error};
 
 use crate::{peer::Peer, types::*};
 
 use tokio::{
     net::TcpStream,
     sync::mpsc::{channel, unbounded_channel, Sender},
-    sync::{oneshot::Sender as OneShotSender, mpsc::UnboundedSender},
+    sync::mpsc::UnboundedSender,
     time::sleep,
 };
 
-const GRACE_PERIOD_SECP256K1S: u64 = 2;
+/// Duration under which to expect a Pong message
 const PING_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Exposes the methods to interact with a remote peer
 pub struct PeerControl {
-    pings_tx: Sender<OneShotSender<()>>,
+    /// Signal channel that drives Ping messaging
+    pings_tx: Sender<()>,
+    /// Signal channel that drives disconnection messaging
     peer_disconnect_tx: UnboundedSender<DisconnectSignal>,  
 }
 
+/// Implementation of the `PeerControl` struct
 impl PeerControl {
-    pub async fn ping(&self) {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        if self.pings_tx.send(tx).await.is_ok() && rx.await.is_ok() {
-            sleep(PING_TIMEOUT).await;
-        }
+    /// Sends a Ping signal and expects a Pong to be received under a given timeout
+    pub fn ping(&self) {
+        futures::executor::block_on(async {
+            if self.pings_tx.send(()).await.is_ok() {
+                sleep(PING_TIMEOUT).await;
+            }
+        });
     }
+    /// Sends a disconnect signal
     pub fn disconnect(&self) {
         let _ = self.peer_disconnect_tx.send(DisconnectSignal {
             initiator: DisconnectInitiator::Local,
@@ -37,12 +44,24 @@ impl PeerControl {
     }
 }
 
+/// The structure responsible of dealing with the network layer
 pub struct NetworkService {
+    /// Capabilities available to this client
     capabilities: Vec<CapabilityInfo>,
+    /// Secret key of this client
     secret_key: SecretKey,
 }
 
+/// Implementation of the `NetworkService` structure
 impl NetworkService {
+    /// Creates a new service
+    /// 
+    /// ### Arguments
+    ///  - capabilities: the provided [`CapabilityInfo`] list
+    ///  - secret_key: a secret key
+    /// 
+    /// ### Returns
+    /// `NetworkService`
     pub fn new(capabilities: Vec<CapabilityInfo>, secret_key: SecretKey) -> Self {
         Self {
             capabilities,
@@ -50,6 +69,13 @@ impl NetworkService {
         }
     }
 
+    /// Connects to another peer and then executes a closure to which the [`PeerControl`] is provided
+    /// 
+    /// ### Arguments
+    ///  - enode: The [`Enode`] to connect to
+    ///  - then: The closure accepting [`PeerControl`] to allow interaction with the connected peer
+    /// ### Returns
+    /// Result of unit type or [`AnyError`]
     pub async fn connect_and_then(
         &self,
         enode: Enode,
@@ -66,23 +92,21 @@ impl NetworkService {
         Ok(())
     }
 
-    pub async fn spawn_control(&self, peer: Peer<TcpStream>) -> PeerControl {
+    /// Wraps a [`Peer<T>`] with its [`PeerControl`]
+    async fn spawn_control(&self, peer: Peer<TcpStream>) -> PeerControl {
         let (mut sink, mut stream) = futures::StreamExt::split(peer);
         let (peer_disconnect_tx, mut peer_disconnect_rx) = unbounded_channel::<DisconnectSignal>();
 
-        let (pings_tx, mut pings_rx) = channel::<OneShotSender<()>>(1);
+        let (pings_tx, mut pings_rx) = channel::<()>(1);
         let (pongs_tx, mut pongs_rx) = channel::<()>(1);
 
         tokio::spawn(async move {
             loop {
-                let mut disconnecting = None;
                 let mut egress = None;
-                let mut trigger: Option<OneShotSender<()>> = None;
                 tokio::select! {
                     // We ping the peer.
-                    Some(tx) = pings_rx.recv() => {
+                    Some(_) = pings_rx.recv() => {
                         egress = Some(PeerMessage::Ping);
-                        trigger = Some(tx);
                     }
                     // Peer has pinged us.
                     Some(_) = pongs_rx.recv() => {
@@ -93,35 +117,16 @@ impl NetworkService {
                         if let DisconnectInitiator::Local = initiator {
                             egress = Some(PeerMessage::Disconnect(reason));
                         }
-                        disconnecting = Some(DisconnectSignal { initiator, reason })
                     }
+                    else => continue
                 };
 
                 if let Some(message) = egress {
                     debug!("Sending egress message: {:?}", message);
-
                     // Send egress message, force disconnect on error.
                     if let Err(e) = sink.send(message).await {
-                        info!("peer disconnected with error {:?}", e);
-                        disconnecting.get_or_insert(DisconnectSignal {
-                            initiator: DisconnectInitiator::LocalForceful,
-                            reason: DisconnectReason::TcpSubsystemError,
-                        });
-                    } else if let Some(trigger) = trigger {
-                        let _ = trigger.send(());
+                        error!("Send message error {:?}", e);
                     }
-                }
-
-                if let Some(DisconnectSignal { initiator, reason }) = disconnecting {
-                    if let DisconnectInitiator::Local = initiator {
-                        // We have sent disconnect message, wait for grace period.
-                        sleep(Duration::from_secs(GRACE_PERIOD_SECP256K1S)).await;
-                    }
-                    info!(
-                        "Received Disconnect message from {:?}: {:?}",
-                        initiator, reason
-                    );
-                    break;
                 }
             }
         });

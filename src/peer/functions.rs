@@ -54,10 +54,10 @@ pub fn kdf(secret: H256, s1: &[u8], dest: &mut [u8]) {
     }
 }
 
-/// Converts a [PeerId] to a [secp256k1::PublicKey] by prepending the [PeerId] bytes with the
+/// Converts a [Public] to a [secp256k1::PublicKey] by prepending the [Public] bytes with the
 /// SECP256K1_TAG_PUBKEY_UNCOMPRESSED tag.
 pub(crate) fn id2pk(id: Public) -> Result<PublicKey, secp256k1::Error> {
-    // NOTE: H512 is used as a PeerId not because it represents a hash, but because 512 bits is
+    // NOTE: H512 is used as a Public not because it represents a hash, but because 512 bits is
     // enough to represent an uncompressed public key.
     let mut s = [0u8; 65];
     // SECP256K1_TAG_PUBKEY_UNCOMPRESSED = 0x04
@@ -67,8 +67,8 @@ pub(crate) fn id2pk(id: Public) -> Result<PublicKey, secp256k1::Error> {
     PublicKey::from_slice(&s)
 }
 
-/// Converts a [secp256k1::PublicKey] to a [PeerId] by stripping the
-/// SECP256K1_TAG_PUBKEY_UNCOMPRESSED tag and storing the rest of the slice in the [PeerId].
+/// Converts a [secp256k1::PublicKey] to a [Public] by stripping the
+/// SECP256K1_TAG_PUBKEY_UNCOMPRESSED tag and storing the rest of the slice in the [Public].
 pub fn pk2id(pk: &PublicKey) -> Public {
     Public::from_slice(&pk.serialize_uncompressed()[1..])
 }
