@@ -10,12 +10,12 @@ use crate::types::Transport;
 use super::{types::*, EciesStream};
 
 /// Implement the [`Stream`] trait for [`EciesStream<T>`].
-/// 
+///
 /// This trait is used to poll the [`Stream`] for [`Bytes`]s that were received from the remote peer.
 /// A `EciesCodec` is used to interpret those bytes that form a frame
-/// 
+///
 /// ### See also
-/// [`tokio_util::codec`] in order to appy a frame on [`Sink`] and [`Stream`] interface 
+/// [`tokio_util::codec`] in order to appy a frame on [`Sink`] and [`Stream`] interface
 impl<T> Stream for EciesStream<T>
 where
     T: Transport,
@@ -38,12 +38,12 @@ where
 }
 
 /// Implement the [`Sink`] trait for [`EciesStream<T>`].
-/// 
+///
 /// This trait is used to send [`Bytes`]s to the [`Sink`]
 /// A `EciesCodec` is used to interpret those bytes that form a frame
-/// 
+///
 /// ### See also
-/// [`tokio_util::codec`] in order to appy a frame on [`Sink`] and [`Stream`] interface 
+/// [`tokio_util::codec`] in order to appy a frame on [`Sink`] and [`Stream`] interface
 impl<Io> Sink<Bytes> for EciesStream<Io>
 where
     Io: Transport,

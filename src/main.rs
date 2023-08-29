@@ -2,17 +2,17 @@ mod networkservice;
 mod peer;
 mod types;
 
+use clap::Parser;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use networkservice::NetworkService;
 use secp256k1::SecretKey;
 use types::*;
-use clap::Parser;
 
 /// Clap representation of the main arguments
 #[derive(Parser)]
 struct Cli {
-    #[arg(required=true)]
+    #[arg(required = true)]
     /// The list of enodes to connect ("enode://...")
     enodes: Vec<String>,
 }
@@ -42,7 +42,7 @@ async fn main() -> Result<(), AnyError> {
 
     // Spawn a connection and then ping toward all the enodes passed as argument
     for node in args.enodes {
-        let node : Enode = node.try_into()?;
+        let node: Enode = node.try_into()?;
         tasks.push(service.connect_and_then(node, |peer| {
             peer.ping();
             peer.disconnect();

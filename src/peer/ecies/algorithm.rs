@@ -46,8 +46,7 @@ impl Ecies {
     pub fn new(secret_key: SecretKey, remote_id: Public) -> Result<Self, EciesError> {
         let nonce = H256::random();
         let public_key = PublicKey::from_secret_key(SECP256K1, &secret_key);
-        let remote_public_key =
-            id2pk(remote_id).map_err(EciesError::InvalidRemotePublicKey)?;
+        let remote_public_key = id2pk(remote_id).map_err(EciesError::InvalidRemotePublicKey)?;
         let ephemeral_secret_key = SecretKey::new(&mut secp256k1::rand::thread_rng());
         Ok(Self {
             secret_key,
@@ -202,8 +201,8 @@ impl Ecies {
     fn decrypt_message<'a>(&self, data: &'a mut [u8]) -> Result<&'a mut [u8], EciesError> {
         let (auth_data, encrypted) = data.split_at_mut(2);
         let (pubkey_bytes, encrypted) = encrypted.split_at_mut(65);
-        let public_key = PublicKey::from_slice(pubkey_bytes)
-            .map_err(EciesError::PublicKeyDecryptFailed)?;
+        let public_key =
+            PublicKey::from_slice(pubkey_bytes).map_err(EciesError::PublicKeyDecryptFailed)?;
         let (data_iv, tag_bytes) = encrypted.split_at_mut(encrypted.len() - 32);
         let (iv, encrypted_data) = data_iv.split_at_mut(16);
         let tag = H256::from_slice(tag_bytes);
@@ -243,8 +242,7 @@ impl Ecies {
         }
         let signature = RecoverableSignature::from_compact(
             &sigdata[0..64],
-            RecoveryId::from_i32(sigdata[64] as i32)
-                .map_err(EciesError::InvalidRecoveryData)?,
+            RecoveryId::from_i32(sigdata[64] as i32).map_err(EciesError::InvalidRecoveryData)?,
         )
         .map_err(EciesError::InvalidRecoveryData)?;
         let remote_id = rlp

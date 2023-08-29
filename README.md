@@ -24,65 +24,93 @@ In order to execute the program you need to clone it on your local hard drive, b
 
 Clone the git repository and move to the created directory:
 
-    git clone git@github.com:digitalillusion/eth-handshake.git
-    cd eth-handshake
+```sh
+git clone git@github.com:digitalillusion/eth-handshake.git
+cd eth-handshake
+```
 
 Run a release cargo build:
 
-    cargo build --release
+```sh
+cargo build --release
+```
+
+## Running
+
+1. Run a couple of ethereum nodes
+```sh
+docker pull ethereum/client-go
+docker run -it -p 30303:30303 ethereum/client-go 
+docker run -it -p 30304:30304 ethereum/client-go --port 30304
+``````
+2. Note down their ids, they will appear in the docker logs like:
+
+```
+    INFO [08-29|10:37:25.217] Started P2P networking                   self=enode://02248bf69e82b15c6160178cc611af179e2b646be15512448d165119cc53eb7ef1d6deab5ab4040dd8a7da2a0304865a6a240fd297937ee9c67eb8de3856c5b2@127.0.0.1:30303
+
+    INFO [08-29|10:37:26.484] Started P2P networking                   self=enode://2d2aec6ad36ec0f73d2341007cfeb5072af02f61f419d6f7bd371b923f93ccd358d4c340bc516add5e19237646c63e125fcca09ec5ae5b9a48835518583825f3@127.0.0.1:30304
+```
+3. Run the release version passing the two nodes as arguments:
+
+```sh
+target/release/eth-handshake "enode://02248bf69e82b15c6160178cc611af179e2b646be15512448d165119cc53eb7ef1d6deab5ab4040dd8a7da2a0304865a6a240fd297937ee9c67eb8de3856c5b2@127.0.0.1:30303" "enode://2d2aec6ad36ec0f73d2341007cfeb5072af02f61f419d6f7bd371b923f93ccd358d4c340bc516add5e19237646c63e125fcca09ec5ae5b9a48835518583825f3@127.0.0.1:30304"
+```
+
+4. You will see interleaving logs of the client handshaking and sending ping-pong messages toward the ethereum nodes. This happens because:
+  * The client is non-blocking and asynchronous, so peer connection is operated in parallel
+  * The ping-pong message would not happen if the handshake was not successful, so it's the verifiable proof of it being successful
 
 ## Producing documentation
 
 The code contains rustdoc comments. In order to produce the HTML documentation and view it in browser it's sufficient to run:
 
-    cargo doc --open
-
+```sh
+cargo doc --open
+```
 ## Running the tests
 
-Explain how to run the automated tests for this system
+There are a few unit tests available that can be run:
 
-### Sample Tests
+```sh
+cargo test
+```
 
-Explain what these tests test and why
+## Code coverage
 
-    Give an example
+`grcov` produces the correct output in either HTML or GitLab compatible format.
 
-### Style test
+**Instrumentation**
+```sh
+rustup component add llvm-tools-preview
+cargo install grcov
 
-Checks if the best practices and the right coding style has been used.
+export LLVM_PROFILE_FILE="eth-handshake-%p-%m.profraw"
+export RUSTFLAGS="-Cinstrument-coverage"
 
-    Give an example
+makers clean
+makers build
+makers test
+```
 
-## Deployment
+**HTML report generation**
 
-Add additional notes to deploy this on a live system
+This will generate a static website in a folder (`target/coverage`), including badges:
 
-## Built With
+```sh
+grcov . -s . -t html --binary-path ./target/debug --llvm --branch --ignore-not-existing --ignore "/*" -o ./target/coverage
+```
 
-  - [Contributor Covenant](https://www.contributor-covenant.org/) - Used
-    for the Code of Conduct
-  - [Creative Commons](https://creativecommons.org/) - Used to choose
-    the license
+Once generated, you can remove the `*.profraw` files
 
-## Contributing
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code
-of conduct, and the process for submitting pull requests to us.
+```sh
+find . \( -name "*.profraw" \) -delete
+```
 
 ## Versioning
 
 We use [Semantic Versioning](http://semver.org/) for versioning. For the versions
 available, see the [tags on this
-repository](https://github.com/PurpleBooth/a-good-readme-template/tags).
-
-## Authors
-
-  - **Billie Thompson** - *Provided README Template* -
-    [PurpleBooth](https://github.com/PurpleBooth)
-
-See also the list of
-[contributors](https://github.com/PurpleBooth/a-good-readme-template/contributors)
-who participated in this project.
+repository](https://github.com/digitalillusion/eth-handshake/tags).
 
 ## License (See LICENSE file for full license)
 
@@ -94,6 +122,5 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 ## Acknowledgments
 
-  - Hat tip to anyone whose code is used
-  - Inspiration
-  - etc
+  - https://github.com/paradigmxyz/reth
+  - https://github.com/ethereum/devp2p/blob/master/rlpx.md

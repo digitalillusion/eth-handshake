@@ -1,8 +1,8 @@
 mod algorithm;
 mod codec;
 mod mac;
-mod types;
 mod traits;
+mod types;
 
 use ethereum_types::Public;
 use futures::sink::SinkExt;
@@ -21,7 +21,7 @@ pub use types::EciesError;
 
 /// Structure representing an ECIES stream.
 /// The transport is framed with a [`EciesCodec`] that provides interpretation of the raw bytes
-/// 
+///
 /// ### Type arguments
 ///  - T: The type of the transport to use for the `EciesStream`, must implement the [`Transport`] trait
 pub struct EciesStream<T> {
@@ -33,12 +33,12 @@ where
     T: Transport,
 {
     /// Perform a connection the other peer
-    /// 
+    ///
     /// ### Arguments
     ///  - transport: The transport to use for the [`EciesStream`]
     ///  - remote_id: The [`Public`] key of the other peer
     ///  - secret_key: The secret key of this client
-    /// 
+    ///
     /// ### Return
     /// Result of `EciesStream<T>` or [`eth-handshake::types::AnyError`]
     #[instrument(skip_all, fields(remote_id=&*format!("{}", remote_id)))]

@@ -16,14 +16,14 @@ use self::ecies::EciesStream;
 use crate::types::*;
 
 /// Structure representing a remote peer connection
-/// 
+///
 /// ### Type arguments
 ///  - T: The type of the transport to use for the [`EciesStream`], must implement the [`Transport`] trait
 pub struct Peer<T> {
     /// The [`EciesStream`] that was authorized and connect
     stream: EciesStream<T>,
     /// A boolean flag that indicates if a disconnection was initiated
-    disconnecting: bool
+    disconnecting: bool,
 }
 
 impl<T> Peer<T>
@@ -31,13 +31,13 @@ where
     T: Transport,
 {
     /// Perform an handshake toward the other peer
-    /// 
+    ///
     /// ### Arguments
     ///  - transport: The transport to use for the [`EciesStream`]
     ///  - enode: The [`Enode`] to connect to
     ///  - shared_capabilities: The collection of [`CapabilityInfo`] to probe for availability on the other peer
     ///  - secret_key: The secret key of this client
-    /// 
+    ///
     /// ### Return
     /// Result of `Peer<T>` or [`AnyError`]
     pub async fn handshake(
@@ -53,7 +53,7 @@ where
 
         let mut stream = EciesStream::connect(transport, enode.id, secret_key)
             .await
-            .map_err( HandshakeError::ConnectionError)?;
+            .map_err(HandshakeError::ConnectionError)?;
 
         let public_key = PublicKey::from_secret_key(SECP256K1, &secret_key);
         let hello = HelloMessage {
@@ -69,7 +69,10 @@ where
 
         Self::match_capabilities(shared_capabilities, hello_received)?;
 
-        Ok(Self { stream, disconnecting: false })
+        Ok(Self {
+            stream,
+            disconnecting: false,
+        })
     }
 
     /// Performs the exchange of [`HelloMessage`]
@@ -95,7 +98,7 @@ where
         stream
             .send(outbound_hello.freeze())
             .await
-            .map_err( HandshakeError::HelloSendError)?;
+            .map_err(HandshakeError::HelloSendError)?;
 
         let hello = stream
             .try_next()
@@ -107,7 +110,7 @@ where
         let message_id_rlp = Rlp::new(&hello[0..1]);
         let message_id = message_id_rlp
             .as_val::<usize>()
-            .map_err( HandshakeError::HelloReceiveDecode)?;
+            .map_err(HandshakeError::HelloReceiveDecode)?;
         match message_id {
             0 => Rlp::new(&hello[1..])
                 .as_val::<HelloMessage>()
@@ -136,10 +139,7 @@ where
     ) -> Result<(), HandshakeError> {
         let required: HashSet<CapabilityInfo> = required.into_iter().collect();
         let offered: HashSet<CapabilityInfo> = hello_received.capabilities.into_iter().collect();
-        let intersection: Vec<CapabilityInfo> = required
-            .intersection(&offered)
-            .cloned()
-            .collect();
+        let intersection: Vec<CapabilityInfo> = required.intersection(&offered).cloned().collect();
         if intersection.is_empty() {
             error!("No shared capabilities, disconnecting.");
             Err(HandshakeError::NoSharedCapabilities)

@@ -72,3 +72,32 @@ pub(crate) fn id2pk(id: Public) -> Result<PublicKey, secp256k1::Error> {
 pub fn pk2id(pk: &PublicKey) -> Public {
     Public::from_slice(&pk.serialize_uncompressed()[1..])
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hex_literal::hex;
+    use secp256k1::{All, Secp256k1, SecretKey};
+
+    #[test]
+    fn pk2id2pk() {
+        let secp: Secp256k1<All> = Secp256k1::new();
+        let prikey = SecretKey::new(&mut rand::thread_rng());
+        let pubkey = PublicKey::from_secret_key(&secp, &prikey);
+        assert_eq!(pubkey, id2pk(pk2id(&pubkey)).unwrap());
+    }
+
+    #[test]
+    fn ecdh() {
+        let our_secret_key = SecretKey::from_slice(&hex!(
+            "202a36e24c3eb39513335ec99a7619bad0e7dc68d69401b016253c7d26dc92f8"
+        ))
+        .unwrap();
+        let remote_public_key = id2pk(hex!("d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666").into()).unwrap();
+
+        assert_eq!(
+            ecdh_x(&remote_public_key, &our_secret_key),
+            hex!("821ce7e01ea11b111a52b2dafae8a3031a372d83bdf1a78109fa0783c2b9d5d3").into()
+        )
+    }
+}

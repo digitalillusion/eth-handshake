@@ -3,14 +3,14 @@ use std::time::Duration;
 use futures::SinkExt;
 use secp256k1::SecretKey;
 use tokio_stream::StreamExt;
-use tracing::{debug, info, error};
+use tracing::{debug, error, info};
 
 use crate::{peer::Peer, types::*};
 
 use tokio::{
     net::TcpStream,
-    sync::mpsc::{channel, unbounded_channel, Sender},
     sync::mpsc::UnboundedSender,
+    sync::mpsc::{channel, unbounded_channel, Sender},
     time::sleep,
 };
 
@@ -22,7 +22,7 @@ pub struct PeerControl {
     /// Signal channel that drives Ping messaging
     pings_tx: Sender<()>,
     /// Signal channel that drives disconnection messaging
-    peer_disconnect_tx: UnboundedSender<DisconnectSignal>,  
+    peer_disconnect_tx: UnboundedSender<DisconnectSignal>,
 }
 
 /// Implementation of the `PeerControl` struct
@@ -55,11 +55,11 @@ pub struct NetworkService {
 /// Implementation of the `NetworkService` structure
 impl NetworkService {
     /// Creates a new service
-    /// 
+    ///
     /// ### Arguments
     ///  - capabilities: the provided [`CapabilityInfo`] list
     ///  - secret_key: a secret key
-    /// 
+    ///
     /// ### Returns
     /// `NetworkService`
     pub fn new(capabilities: Vec<CapabilityInfo>, secret_key: SecretKey) -> Self {
@@ -70,7 +70,7 @@ impl NetworkService {
     }
 
     /// Connects to another peer and then executes a closure to which the [`PeerControl`] is provided
-    /// 
+    ///
     /// ### Arguments
     ///  - enode: The [`Enode`] to connect to
     ///  - then: The closure accepting [`PeerControl`] to allow interaction with the connected peer
@@ -80,8 +80,7 @@ impl NetworkService {
         &self,
         enode: Enode,
         then: impl FnOnce(PeerControl),
-    ) -> Result<(), AnyError>
-    {
+    ) -> Result<(), AnyError> {
         let capabilities = self.capabilities.clone();
         let transport = TcpStream::connect(enode.addr).await?;
         let peer = Peer::handshake(transport, enode, capabilities, self.secret_key).await?;
@@ -164,7 +163,7 @@ impl NetworkService {
 
         PeerControl {
             pings_tx,
-            peer_disconnect_tx
+            peer_disconnect_tx,
         }
     }
 }
