@@ -53,7 +53,7 @@ docker run -it -p 30304:30304 ethereum/client-go --port 30304
 3. Run the release version passing the two nodes as arguments:
 
 ```sh
-target/release/eth-handshake "enode://02248bf69e82b15c6160178cc611af179e2b646be15512448d165119cc53eb7ef1d6deab5ab4040dd8a7da2a0304865a6a240fd297937ee9c67eb8de3856c5b2@127.0.0.1:30303" "enode://2d2aec6ad36ec0f73d2341007cfeb5072af02f61f419d6f7bd371b923f93ccd358d4c340bc516add5e19237646c63e125fcca09ec5ae5b9a48835518583825f3@127.0.0.1:30304"
+RUST_LOG=info target/release/eth-handshake "enode://02248bf69e82b15c6160178cc611af179e2b646be15512448d165119cc53eb7ef1d6deab5ab4040dd8a7da2a0304865a6a240fd297937ee9c67eb8de3856c5b2@127.0.0.1:30303" "enode://2d2aec6ad36ec0f73d2341007cfeb5072af02f61f419d6f7bd371b923f93ccd358d4c340bc516add5e19237646c63e125fcca09ec5ae5b9a48835518583825f3@127.0.0.1:30304"
 ```
 
 4. You will see interleaving logs of the client handshaking and sending ping-pong messages toward the ethereum nodes. This happens because:
